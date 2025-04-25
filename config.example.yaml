@@ -1,0 +1,30 @@
+bot:
+  token: "YOUR_BOT_TOKEN_HERE"
+  name: "CrushBot"
+
+admins:
+  - 123456789  # Replace with actual admin user IDs
+  - 987654321
+
+database:
+  uri: "mongodb://localhost:27017/"
+  name: "crushbot_db"
+
+# Default messages
+messages:
+  welcome: "Welcome {user} to {group}! Please read the rules and enjoy your stay."
+  ban: "{user} has been banned from the group. Reason: {reason}"
+  unban: "{user} has been unbanned from the group."
+  restrict: "{user} has been restricted from {actions} for {duration}."
+  
+# Logging settings
+logging:
+  level: "INFO"
+  file: "bot.log"
+  max_logs: 100  # Number of logs to keep in database
+
+# Feature toggles
+features:
+  welcome_message: true
+  ban_logging: true
+  action_logging: true 
