@@ -1,9 +1,9 @@
 bot:
-  token: "YOUR_BOT_TOKEN_HERE"
+  token: "7796407829:AAEtpsGuITAgrxBCVF3Xn0D_HyjzrNWN2dQ"
   name: "CrushBot"
 
 admins:
-  - 123456789  # Replace with actual admin user IDs
+  - 6771364361  # Replace with actual admin user IDs
   - 987654321
 
 database:
