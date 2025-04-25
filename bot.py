@@ -16,6 +16,9 @@ from handlers.user_management import register_user_management_handlers
 from handlers.welcome import register_welcome_handlers
 from handlers.admin_commands import register_admin_handlers
 from handlers.general_commands import register_general_handlers
+from handlers.antiflood import register_antiflood_handlers
+from handlers.blacklist import register_blacklist_handlers
+from handlers.warns import register_warns_handlers
 from utils.database import Database
 from utils.logger import ActionLogger
 
@@ -59,6 +62,11 @@ def main():
     register_user_management_handlers(dispatcher, config, db, action_logger)
     register_welcome_handlers(dispatcher, config, db)
     register_admin_handlers(dispatcher, config, db, action_logger)
+    
+    # Register new handlers for expanded functionality
+    register_antiflood_handlers(dispatcher, config, db)
+    register_blacklist_handlers(dispatcher, config, db)
+    register_warns_handlers(dispatcher, config, db, action_logger)
     
     # Start the Bot
     updater.start_polling()

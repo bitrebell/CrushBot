@@ -1,0 +1,70 @@
+bot:
+  token: "YOUR_BOT_TOKEN_HERE"
+  name: "CrushBot"
+  username: "your_bot_username"
+  owner_id: 123456789  # Replace with your Telegram user ID
+  owner_username: "your_username"  # Your Telegram username without @
+
+admins:
+  - 123456789  # Replace with actual admin user IDs
+  - 987654321
+
+# Database configuration
+database:
+  uri: "mongodb://localhost:27017/"
+  name: "crushbot_db"
+
+# Default messages
+messages:
+  welcome: "Welcome {user} to {group}! Please read the rules and enjoy your stay."
+  ban: "{user} has been banned from the group. Reason: {reason}"
+  unban: "{user} has been unbanned from the group."
+  restrict: "{user} has been restricted from {actions} for {duration}."
+  rules_text: "Please follow these group rules:\n\n1. Be respectful to all members\n2. No spamming or flooding\n3. No adult content\n4. No hate speech or harassment\n5. Follow Telegram's Terms of Service"
+
+# Logging settings
+logging:
+  level: "INFO"
+  file: "bot.log"
+  max_logs: 100  # Number of logs to keep in database
+  chat_id: -100123456789  # Log channel ID (optional)
+
+# Feature toggles
+features:
+  welcome_message: true
+  ban_logging: true
+  action_logging: true
+  antiflood: true
+  blacklist_words: true
+  reporting: true
+  warns: true
+  auto_delete_service_messages: true
+  karma: true
+  notes: true
+  locks: true
+  nightmode: false  # Automatically restrict chat during specified hours
+
+# Restriction settings
+restrictions:
+  warn_limit: 3  # Number of warns before user gets banned
+  warn_expiry: 604800  # Warn expiry in seconds (7 days)
+  warn_punishment: "ban"  # Options: ban, kick, mute
+
+# Anti-flood settings
+antiflood:
+  limit: 10  # Messages
+  time: 15  # Seconds
+  action: "mute"  # Options: ban, kick, mute
+  duration: 900  # Duration of mute/ban in seconds (15 minutes)
+
+# Blacklisted words/phrases
+blacklist:
+  - "badword1"
+  - "badword2"
+  - "badword3"
+
+# Night mode settings (if enabled)
+nightmode:
+  start_time: "00:00"  # 24-hour format
+  end_time: "07:00"
+  days: [0, 1, 2, 3, 4, 5, 6]  # 0 = Monday, 6 = Sunday 
