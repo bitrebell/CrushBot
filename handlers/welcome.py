@@ -4,7 +4,6 @@ Handles welcome messages for new members joining a group
 """
 
 import logging
-import functools
 from typing import Dict, Any, Optional, List
 from telegram import Update, ParseMode, User, Chat
 from telegram.ext import MessageHandler, Filters, CallbackContext, CommandHandler, Dispatcher
@@ -12,10 +11,6 @@ from utils.helpers import is_admin
 from utils.database import Database
 
 logger = logging.getLogger(__name__)
-
-# Cache for welcome messages to reduce database lookups
-welcome_message_cache = {}
-rules_cache = {}
 
 def format_welcome_message(message_template: str, user: User, chat: Chat) -> str:
     """
@@ -29,77 +24,18 @@ def format_welcome_message(message_template: str, user: User, chat: Chat) -> str
     Returns:
         Formatted welcome message
     """
-    # Basic formatting - most common replacements first for performance
+    # Basic formatting
     message = message_template.replace('{user}', f"[{user.first_name}](tg://user?id={user.id})")
     message = message.replace('{group}', chat.title)
     
-    # Only do additional replacements if needed
-    if '{username}' in message:
-        message = message.replace('{username}', f"@{user.username}" if user.username else user.first_name)
-    if '{userid}' in message:
-        message = message.replace('{userid}', str(user.id))
-    if '{first}' in message:
-        message = message.replace('{first}', user.first_name)
-    if '{last}' in message:
-        message = message.replace('{last}', user.last_name if user.last_name else '')
-    if '{chatid}' in message:
-        message = message.replace('{chatid}', str(chat.id))
+    # Additional optional formatting
+    message = message.replace('{username}', f"@{user.username}" if user.username else user.first_name)
+    message = message.replace('{userid}', str(user.id))
+    message = message.replace('{first}', user.first_name)
+    message = message.replace('{last}', user.last_name if user.last_name else '')
+    message = message.replace('{chatid}', str(chat.id))
     
     return message
-
-def get_welcome_message(chat_id: int, context: CallbackContext) -> str:
-    """Get welcome message from cache or database."""
-    # Check cache first
-    if chat_id in welcome_message_cache:
-        return welcome_message_cache[chat_id]
-    
-    # Not in cache, try to get from database
-    db = context.bot_data.get('db')
-    if not db:
-        return "Welcome {user} to {group}!"
-    
-    group_data = db.get_group(chat_id)
-    welcome_message = None
-    
-    # Check if group has a custom welcome message
-    if group_data and 'welcome_message' in group_data:
-        welcome_message = group_data['welcome_message']
-    
-    # If no custom message, use default from config
-    if not welcome_message and 'config' in context.bot_data:
-        config = context.bot_data['config']
-        if 'messages' in config and 'welcome' in config['messages']:
-            welcome_message = config['messages']['welcome']
-    
-    # If still no message, use hardcoded default
-    if not welcome_message:
-        welcome_message = "Welcome {user} to {group}!"
-    
-    # Cache the message for future use
-    welcome_message_cache[chat_id] = welcome_message
-    
-    return welcome_message
-
-def get_group_rules(chat_id: int, context: CallbackContext) -> Optional[str]:
-    """Get group rules from cache or database."""
-    # Check cache first
-    if chat_id in rules_cache:
-        return rules_cache[chat_id]
-    
-    # Not in cache, try to get from database
-    db = context.bot_data.get('db')
-    if not db:
-        return None
-    
-    group_data = db.get_group(chat_id)
-    rules = None
-    
-    if group_data and 'rules' in group_data and group_data['rules']:
-        rules = group_data['rules']
-        # Cache the rules
-        rules_cache[chat_id] = rules
-    
-    return rules
 
 def welcome_new_members(update: Update, context: CallbackContext) -> None:
     """Send welcome message when new members join the group."""
@@ -119,15 +55,34 @@ def welcome_new_members(update: Update, context: CallbackContext) -> None:
     # Get new members
     new_members = message.new_chat_members
     
-    # Skip if no new members
+    # Skip if no new members or if the new member is the bot itself
     if not new_members:
         return
     
-    # Get welcome message template (from cache or database)
-    welcome_message_template = get_welcome_message(chat.id, context)
+    # Get database
+    if 'db' not in context.bot_data:
+        logger.error("Database not available for welcome message")
+        return
     
-    # Get group rules if they exist (from cache or database)
-    rules = get_group_rules(chat.id, context)
+    db = context.bot_data['db']
+    
+    # Get group data
+    group_data = db.get_group(chat.id)
+    welcome_message_template = None
+    
+    # Check if group has a custom welcome message
+    if group_data and 'welcome_message' in group_data:
+        welcome_message_template = group_data['welcome_message']
+    
+    # If no custom message, use default from config
+    if not welcome_message_template and 'config' in context.bot_data:
+        config = context.bot_data['config']
+        if 'messages' in config and 'welcome' in config['messages']:
+            welcome_message_template = config['messages']['welcome']
+    
+    # If still no message, use hardcoded default
+    if not welcome_message_template:
+        welcome_message_template = "Welcome {user} to {group}!"
     
     # Process each new member
     for new_member in new_members:
@@ -139,16 +94,15 @@ def welcome_new_members(update: Update, context: CallbackContext) -> None:
         formatted_message = format_welcome_message(welcome_message_template, new_member, chat)
         
         # Add rules if they exist
-        if rules:
-            formatted_message += f"\n\n*Group Rules:*\n{rules}"
+        if group_data and 'rules' in group_data and group_data['rules']:
+            formatted_message += f"\n\n*Group Rules:*\n{group_data['rules']}"
         
         # Send welcome message
         try:
             context.bot.send_message(
                 chat_id=chat.id,
                 text=formatted_message,
-                parse_mode=ParseMode.MARKDOWN,
-                disable_web_page_preview=True  # Faster message sending
+                parse_mode=ParseMode.MARKDOWN
             )
         except Exception as e:
             logger.error(f"Error sending welcome message: {e}")
@@ -190,9 +144,6 @@ def set_welcome_message(update: Update, context: CallbackContext) -> None:
         db = context.bot_data['db']
         db.update_group_setting(chat.id, 'welcome_message', welcome_text)
         
-        # Update cache
-        welcome_message_cache[chat.id] = welcome_text
-        
         message.reply_text("Welcome message has been updated successfully.")
         
         # Log action if logger is available
@@ -230,10 +181,6 @@ def reset_welcome_message(update: Update, context: CallbackContext) -> None:
         if group_data and 'welcome_message' in group_data:
             # Update group to remove welcome_message
             db.update_group_setting(chat.id, 'welcome_message', None)
-            
-            # Update cache - remove custom message
-            if chat.id in welcome_message_cache:
-                del welcome_message_cache[chat.id]
             
             message.reply_text("Welcome message has been reset to default.")
             

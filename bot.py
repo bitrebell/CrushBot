@@ -8,11 +8,8 @@ CrushBot - A Telegram bot for advanced group management
 import logging
 import yaml
 import os
-import time
-import functools
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext
-from telegram import Update, ParseMode, Bot, TelegramError
-from telegram.utils.request import Request
+from telegram import Update, ParseMode
 
 # Import modules
 from handlers.user_management import register_user_management_handlers
@@ -29,21 +26,11 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Create a cache for frequently accessed data
-cache = {}
-
 def load_config(config_path='config.yaml'):
     """Load configuration from YAML file."""
     try:
-        # Check if config is already cached
-        if 'config' in cache:
-            return cache['config']
-            
         with open(config_path, 'r') as config_file:
-            config = yaml.safe_load(config_file)
-            # Cache the config
-            cache['config'] = config
-            return config
+            return yaml.safe_load(config_file)
     except Exception as e:
         logger.error(f"Error loading config: {e}")
         if not os.path.exists(config_path):
@@ -52,8 +39,6 @@ def load_config(config_path='config.yaml'):
 
 def main():
     """Start the bot."""
-    start_time = time.time()
-    
     # Load configuration
     config = load_config()
     
@@ -63,25 +48,11 @@ def main():
     # Initialize action logger
     action_logger = ActionLogger(db)
     
-    # Configure custom connection pool for better performance
-    request = Request(con_pool_size=16, connect_timeout=15.0, read_timeout=15.0)
-    
-    # Create the bot with custom request
-    bot = Bot(token=config['bot']['token'], request=request)
-    
-    # Create the Updater with custom settings
-    updater = Updater(bot=bot, workers=8)  # Increase number of worker threads
+    # Create the Updater and pass it your bot's token
+    updater = Updater(config['bot']['token'])
     
     # Get the dispatcher to register handlers
     dispatcher = updater.dispatcher
-    
-    # Store common objects in dispatcher for easy access
-    dispatcher.bot_data['config'] = config
-    dispatcher.bot_data['db'] = db
-    dispatcher.bot_data['logger'] = action_logger
-    
-    # Preload username cache for faster user lookups
-    dispatcher.bot_data['username_cache'] = {}
     
     # Register all command handlers
     register_general_handlers(dispatcher, config)
@@ -89,12 +60,8 @@ def main():
     register_welcome_handlers(dispatcher, config, db)
     register_admin_handlers(dispatcher, config, db, action_logger)
     
-    # Log startup time
-    startup_time = time.time() - start_time
-    logger.info(f"Startup completed in {startup_time:.2f} seconds")
-    
     # Start the Bot
-    updater.start_polling(timeout=30, drop_pending_updates=True, allowed_updates=Update.ALL_TYPES)
+    updater.start_polling()
     logger.info(f"{config['bot']['name']} started. Press Ctrl+C to stop.")
     
     # Run the bot until you press Ctrl-C

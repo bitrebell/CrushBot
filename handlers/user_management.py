@@ -5,45 +5,21 @@ Includes ban, unban, and restrict commands
 
 import logging
 import re
-import time
 from datetime import datetime, timedelta
 from typing import Dict, Any, Optional, List, Tuple
-from telegram import Update, ParseMode, ChatPermissions, ChatAction
+from telegram import Update, ParseMode, ChatPermissions
 from telegram.ext import CommandHandler, CallbackContext, Dispatcher
 from telegram.error import BadRequest, TelegramError
 from utils.helpers import (
     extract_user_and_text, 
     parse_duration, 
     get_readable_time, 
-    is_admin,
-    update_username_cache
+    is_admin
 )
 from utils.database import Database
 from utils.logger import ActionLogger
 
 logger = logging.getLogger(__name__)
-
-# Cache of banned users for each group
-banned_users_cache = {}  # Format: {group_id: (banned_users_list, expiry_time)}
-BANNED_CACHE_TTL = 300  # 5 minutes
-
-def get_banned_users(group_id: int, db: Database, force_refresh: bool = False) -> List[Dict[str, Any]]:
-    """Get banned users with caching for better performance."""
-    now = time.time()
-    
-    # Check cache first unless force refresh is requested
-    if not force_refresh and group_id in banned_users_cache:
-        banned_list, expiry = banned_users_cache[group_id]
-        if now < expiry:
-            return banned_list
-    
-    # Get from database
-    banned_list = db.get_banned_users(group_id)
-    
-    # Update cache
-    banned_users_cache[group_id] = (banned_list, now + BANNED_CACHE_TTL)
-    
-    return banned_list
 
 def ban(update: Update, context: CallbackContext) -> None:
     """Ban a user from the group."""
@@ -80,19 +56,12 @@ def ban(update: Update, context: CallbackContext) -> None:
         message.reply_text("You can't ban yourself.")
         return
     
-    # Show "typing" action while processing
-    context.bot.send_chat_action(chat_id=chat.id, action=ChatAction.TYPING)
-    
     # Check if target user is an admin
     try:
         member = chat.get_member(user_id)
         if member.status in ['creator', 'administrator']:
             message.reply_text("I can't ban administrators.")
             return
-        
-        # Cache username if available
-        if member.user.username:
-            update_username_cache(context, member.user.username, user_id)
     except BadRequest as e:
         message.reply_text(f"Error: {e.message}")
         return
@@ -129,9 +98,9 @@ def ban(update: Update, context: CallbackContext) -> None:
         
         try:
             # Try to get user mention
-            banned_user = member.user  # Use already fetched member data
+            banned_user = context.bot.get_chat_member(chat.id, user_id).user
             ban_message += f"[{banned_user.first_name}](tg://user?id={user_id})"
-        except (BadRequest, AttributeError):
+        except BadRequest:
             # Fallback to just showing user_id
             ban_message += f"`{user_id}`"
         
@@ -145,8 +114,7 @@ def ban(update: Update, context: CallbackContext) -> None:
         
         message.reply_text(
             ban_message,
-            parse_mode=ParseMode.MARKDOWN,
-            disable_web_page_preview=True
+            parse_mode=ParseMode.MARKDOWN
         )
         
         # Log the ban if database and logger are available
@@ -162,10 +130,6 @@ def ban(update: Update, context: CallbackContext) -> None:
                 'permanent': duration_seconds is None
             }
             db.ban_user(chat.id, user_id, ban_data)
-            
-            # Invalidate banned users cache
-            if chat.id in banned_users_cache:
-                del banned_users_cache[chat.id]
             
             # Log the ban action
             action_logger.log_ban(
@@ -211,9 +175,6 @@ def unban(update: Update, context: CallbackContext) -> None:
         message.reply_text("I'm not banned.")
         return
     
-    # Show "typing" action while processing
-    context.bot.send_chat_action(chat_id=chat.id, action=ChatAction.TYPING)
-    
     # Try to unban the user
     try:
         context.bot.unban_chat_member(chat.id, user_id)
@@ -225,10 +186,6 @@ def unban(update: Update, context: CallbackContext) -> None:
             # Try to get user mention
             unbanned_user = context.bot.get_chat(user_id)
             unban_message += f"[{unbanned_user.first_name}](tg://user?id={user_id})"
-            
-            # Cache username if available
-            if unbanned_user.username:
-                update_username_cache(context, unbanned_user.username, user_id)
         except BadRequest:
             # Fallback to just showing user_id
             unban_message += f"`{user_id}`"
@@ -237,8 +194,7 @@ def unban(update: Update, context: CallbackContext) -> None:
         
         message.reply_text(
             unban_message,
-            parse_mode=ParseMode.MARKDOWN,
-            disable_web_page_preview=True
+            parse_mode=ParseMode.MARKDOWN
         )
         
         # Log the unban if database and logger are available
@@ -248,10 +204,6 @@ def unban(update: Update, context: CallbackContext) -> None:
             
             # Remove from ban list
             db.unban_user(chat.id, user_id)
-            
-            # Invalidate banned users cache
-            if chat.id in banned_users_cache:
-                del banned_users_cache[chat.id]
             
             # Log the unban action
             action_logger.log_unban(
@@ -300,34 +252,27 @@ def restrict(update: Update, context: CallbackContext) -> None:
         message.reply_text("You can't restrict yourself.")
         return
     
-    # Show "typing" action while processing
-    context.bot.send_chat_action(chat_id=chat.id, action=ChatAction.TYPING)
-    
     # Check if target user is an admin
     try:
         member = chat.get_member(user_id)
         if member.status in ['creator', 'administrator']:
             message.reply_text("I can't restrict administrators.")
             return
-            
-        # Cache username if available
-        if member.user.username:
-            update_username_cache(context, member.user.username, user_id)
     except BadRequest as e:
         message.reply_text(f"Error: {e.message}")
         return
     
     # Default restrictions: everything disabled
-    permissions_dict = {
-        'can_send_messages': False,
-        'can_send_media_messages': False,
-        'can_send_polls': False,
-        'can_send_other_messages': False,
-        'can_add_web_page_previews': False,
-        'can_change_info': False,
-        'can_invite_users': False,
-        'can_pin_messages': False
-    }
+    permissions = ChatPermissions(
+        can_send_messages=False,
+        can_send_media_messages=False,
+        can_send_polls=False,
+        can_send_other_messages=False,
+        can_add_web_page_previews=False,
+        can_change_info=False,
+        can_invite_users=False,
+        can_pin_messages=False
+    )
     
     # Parse custom restrictions and duration
     duration_seconds = None
@@ -369,16 +314,35 @@ def restrict(update: Update, context: CallbackContext) -> None:
                     restriction_flags['can_pin_messages'] = value
                 elif flag == 'all':
                     # Set all permissions to the same value
-                    for perm in permissions_dict:
-                        restriction_flags[perm] = value
+                    restriction_flags = {
+                        'can_send_messages': value,
+                        'can_send_media_messages': value,
+                        'can_send_polls': value,
+                        'can_send_other_messages': value,
+                        'can_add_web_page_previews': value,
+                        'can_change_info': value,
+                        'can_invite_users': value,
+                        'can_pin_messages': value
+                    }
     
     # Apply custom restrictions if any were specified
     if restriction_flags:
+        permissions_dict = {
+            'can_send_messages': False,
+            'can_send_media_messages': False,
+            'can_send_polls': False,
+            'can_send_other_messages': False,
+            'can_add_web_page_previews': False,
+            'can_change_info': False,
+            'can_invite_users': False,
+            'can_pin_messages': False
+        }
+        
         # Update with any flags that were specified
         permissions_dict.update(restriction_flags)
-    
-    # Create permissions object
-    permissions = ChatPermissions(**permissions_dict)
+        
+        # Create new permissions object
+        permissions = ChatPermissions(**permissions_dict)
     
     # Get readable duration for logging
     duration_readable = get_readable_time(duration_seconds) if duration_seconds else "permanent"
@@ -397,10 +361,10 @@ def restrict(update: Update, context: CallbackContext) -> None:
         restrict_message = f"User "
         
         try:
-            # Try to get user mention - use already fetched member data
-            restricted_user = member.user
+            # Try to get user mention
+            restricted_user = context.bot.get_chat_member(chat.id, user_id).user
             restrict_message += f"[{restricted_user.first_name}](tg://user?id={user_id})"
-        except (BadRequest, AttributeError):
+        except BadRequest:
             # Fallback to just showing user_id
             restrict_message += f"`{user_id}`"
         
@@ -411,8 +375,7 @@ def restrict(update: Update, context: CallbackContext) -> None:
         
         message.reply_text(
             restrict_message,
-            parse_mode=ParseMode.MARKDOWN,
-            disable_web_page_preview=True
+            parse_mode=ParseMode.MARKDOWN
         )
         
         # Log the restriction if logger is available
@@ -453,13 +416,10 @@ def banlist(update: Update, context: CallbackContext) -> None:
         message.reply_text("Database is not available.")
         return
     
-    # Show "typing" action while processing
-    context.bot.send_chat_action(chat_id=chat.id, action=ChatAction.TYPING)
-    
     db = context.bot_data['db']
     
-    # Get banned users from cache or database
-    banned_users = get_banned_users(chat.id, db)
+    # Get banned users from database
+    banned_users = db.get_banned_users(chat.id)
     
     if not banned_users:
         message.reply_text("There are no banned users in this group.")
@@ -468,41 +428,24 @@ def banlist(update: Update, context: CallbackContext) -> None:
     # Prepare banlist message
     banlist_text = "🚫 *Banned Users*\n\n"
     
-    # Get current time once for efficiency
-    now = datetime.now()
-    
     for banned in banned_users:
         user_id = banned['user_id']
         reason = banned.get('reason', 'No reason provided')
         permanent = banned.get('permanent', True)
         expires_at = banned.get('expires_at')
         
-        # Try to get user's name from cache first
-        user_name = f"User {user_id}"
-        username_found = False
-        
-        if context.bot_data.get('username_cache'):
-            for username, cached_user_id in context.bot_data['username_cache'].items():
-                if cached_user_id == user_id:
-                    user_name = f"@{username}"
-                    username_found = True
-                    break
-        
-        # If not found in cache, try to get from API
-        if not username_found:
-            try:
-                user = context.bot.get_chat(user_id)
-                user_name = user.first_name
-                # Cache username for future use
-                if user.username:
-                    update_username_cache(context, user.username, user_id)
-            except (BadRequest, TelegramError):
-                pass
+        # Try to get user's name
+        try:
+            user = context.bot.get_chat(user_id)
+            user_name = user.first_name
+        except (BadRequest, TelegramError):
+            user_name = f"User {user_id}"
         
         banlist_text += f"• [{user_name}](tg://user?id={user_id})"
         
         if not permanent and expires_at:
             # Calculate time remaining
+            now = datetime.now()
             if expires_at > now:
                 time_remaining = expires_at - now
                 readable_time = get_readable_time(int(time_remaining.total_seconds()))
@@ -522,21 +465,18 @@ def banlist(update: Update, context: CallbackContext) -> None:
             if i == 0:
                 message.reply_text(
                     part,
-                    parse_mode=ParseMode.MARKDOWN,
-                    disable_web_page_preview=True
+                    parse_mode=ParseMode.MARKDOWN
                 )
             else:
                 context.bot.send_message(
                     chat_id=chat.id,
                     text=part,
-                    parse_mode=ParseMode.MARKDOWN,
-                    disable_web_page_preview=True
+                    parse_mode=ParseMode.MARKDOWN
                 )
     else:
         message.reply_text(
             banlist_text,
-            parse_mode=ParseMode.MARKDOWN,
-            disable_web_page_preview=True
+            parse_mode=ParseMode.MARKDOWN
         )
 
 def register_user_management_handlers(
@@ -546,6 +486,10 @@ def register_user_management_handlers(
     action_logger: ActionLogger
 ) -> None:
     """Register all user management command handlers."""
+    # Store database and logger in bot_data for access in handlers
+    dispatcher.bot_data['db'] = db
+    dispatcher.bot_data['logger'] = action_logger
+    
     # Register command handlers
     dispatcher.add_handler(CommandHandler("ban", ban))
     dispatcher.add_handler(CommandHandler("unban", unban))

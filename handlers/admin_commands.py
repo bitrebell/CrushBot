@@ -4,10 +4,9 @@ Includes logs viewing and other admin-specific commands
 """
 
 import logging
-import time
 from datetime import datetime
-from typing import Dict, Any, Optional, List, Tuple
-from telegram import Update, ParseMode, ChatAction
+from typing import Dict, Any, Optional, List
+from telegram import Update, ParseMode
 from telegram.ext import CommandHandler, CallbackContext, Dispatcher
 from telegram.error import BadRequest, TelegramError
 from utils.helpers import is_admin, get_readable_time
@@ -15,34 +14,6 @@ from utils.database import Database
 from utils.logger import ActionLogger
 
 logger = logging.getLogger(__name__)
-
-# Cache for admin usernames to avoid repeated API calls
-admin_username_cache = {}  # Format: {admin_id: (username, expiry_time)}
-ADMIN_CACHE_TTL = 3600  # 1 hour
-
-def get_admin_name(admin_id: int, context: CallbackContext) -> str:
-    """Get admin name with caching."""
-    # Check cache first
-    now = time.time()
-    if admin_id in admin_username_cache:
-        admin_name, expiry = admin_username_cache[admin_id]
-        if now < expiry:
-            return admin_name
-    
-    # Not in cache or expired, fetch from API
-    admin_name = f"Admin {admin_id}"
-    try:
-        admin = context.bot.get_chat(admin_id)
-        admin_name = admin.first_name
-        if admin.username:
-            admin_name = f"@{admin.username}"
-        
-        # Cache the result
-        admin_username_cache[admin_id] = (admin_name, now + ADMIN_CACHE_TTL)
-    except (BadRequest, TelegramError):
-        pass
-    
-    return admin_name
 
 def format_log_entry(log_entry: Dict[str, Any], context: CallbackContext) -> str:
     """
@@ -65,36 +36,33 @@ def format_log_entry(log_entry: Dict[str, Any], context: CallbackContext) -> str
     # Format timestamp
     timestamp_str = timestamp.strftime('%Y-%m-%d %H:%M:%S')
     
-    # Format admin name - use cached version
-    admin_name = get_admin_name(admin_id, context)
+    # Format admin name
+    admin_name = f"Admin {admin_id}"
+    try:
+        admin = context.bot.get_chat(admin_id)
+        admin_name = admin.first_name
+        if admin.username:
+            admin_name = f"@{admin.username}"
+    except (BadRequest, TelegramError):
+        pass
     
     # Format target user name if applicable
     target_user_str = ""
     if target_user_id:
-        target_user_str = f" on User {target_user_id}"
-        
-        # Try to get from username cache first
-        if (context.bot_data.get('username_cache') and 
-            str(target_user_id) in context.bot_data['username_cache'].values()):
-            for username, user_id in context.bot_data['username_cache'].items():
-                if user_id == target_user_id:
-                    target_user_str = f" on @{username}"
-                    break
-        else:
-            # Try to get user mention
-            try:
-                target_user = context.bot.get_chat(target_user_id)
-                target_user_name = target_user.first_name
-                if target_user.username:
-                    target_user_name = f"@{target_user.username}"
-                target_user_str = f" on [{target_user_name}](tg://user?id={target_user_id})"
-            except (BadRequest, TelegramError):
-                pass
+        target_user_name = f"User {target_user_id}"
+        try:
+            target_user = context.bot.get_chat(target_user_id)
+            target_user_name = target_user.first_name
+            if target_user.username:
+                target_user_name = f"@{target_user.username}"
+            target_user_str = f" on [{target_user_name}](tg://user?id={target_user_id})"
+        except (BadRequest, TelegramError):
+            target_user_str = f" on User {target_user_id}"
     
     # Format action type
     action_str = action_type.replace('_', ' ').title()
     
-    # Format details based on action type - optimize for most common cases
+    # Format details based on action type
     details_str = ""
     if action_type == 'ban':
         reason = details.get('reason', 'No reason provided')
@@ -160,9 +128,6 @@ def logs(update: Update, context: CallbackContext) -> None:
         limit = int(context.args[0])
         limit = max(1, min(limit, 50))  # Keep between 1 and 50
     
-    # Show "typing" action while fetching logs
-    context.bot.send_chat_action(chat_id=chat.id, action=ChatAction.TYPING)
-    
     db = context.bot_data['db']
     
     # Get logs from database
@@ -175,16 +140,14 @@ def logs(update: Update, context: CallbackContext) -> None:
     # Prepare logs message
     logs_text = f"📝 *Recent Actions in {chat.title}*\n\n"
     
-    # Format log entries
-    log_entries = [format_log_entry(log_entry, context) for log_entry in logs]
-    logs_text += "\n\n".join(log_entries)
+    for log_entry in logs:
+        logs_text += format_log_entry(log_entry, context) + "\n\n"
     
     # Send the logs
     try:
         message.reply_text(
             logs_text,
-            parse_mode=ParseMode.MARKDOWN,
-            disable_web_page_preview=True  # Faster message sending
+            parse_mode=ParseMode.MARKDOWN
         )
     except BadRequest:
         # If parsing fails, try without markdown
