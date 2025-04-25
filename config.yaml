@@ -4,11 +4,14 @@ bot:
 
 admins:
   - 6771364361  # Replace with actual admin user IDs
-  - 987654321
 
 database:
   uri: "mongodb://localhost:27017/"
   name: "crushbot_db"
+  # Performance settings
+  max_pool_size: 50
+  connection_timeout_ms: 5000
+  server_selection_timeout_ms: 5000
 
 # Default messages
 messages:
@@ -27,4 +30,12 @@ logging:
 features:
   welcome_message: true
   ban_logging: true
-  action_logging: true 
+  action_logging: true
+
+# Performance settings
+performance:
+  cache_ttl: 600  # Cache expiration in seconds
+  admin_cache_ttl: 300  # Admin status cache expiration
+  worker_threads: 8  # Number of worker threads
+  connection_pool_size: 16  # API connection pool size
+  read_timeout: 10  # API read timeout 

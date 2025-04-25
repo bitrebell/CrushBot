@@ -16,17 +16,42 @@ class Database:
     def __init__(self, uri: str, db_name: str):
         """Initialize database connection."""
         try:
-            self.client = pymongo.MongoClient(uri)
+            # Use connection pooling for better performance
+            self.client = pymongo.MongoClient(uri, maxPoolSize=50, 
+                                             connectTimeoutMS=5000,
+                                             serverSelectionTimeoutMS=5000)
             self.db = self.client[db_name]
+            
             # Create collections if they don't exist
             self.users = self.db.users
             self.groups = self.db.groups
             self.banned_users = self.db.banned_users
             self.logs = self.db.logs
+            
+            # Create indexes for faster queries
+            self._create_indexes()
+            
             logger.info("Database connection established")
         except Exception as e:
             logger.error(f"Database connection failed: {e}")
             raise
+    
+    def _create_indexes(self):
+        """Create indexes for faster queries."""
+        # Users collection
+        self.users.create_index("user_id", unique=True)
+        
+        # Groups collection
+        self.groups.create_index("group_id", unique=True)
+        
+        # Banned users collection - compound index
+        self.banned_users.create_index([("group_id", pymongo.ASCENDING), 
+                                      ("user_id", pymongo.ASCENDING)], 
+                                     unique=True)
+        
+        # Logs collection - for faster retrieval of logs
+        self.logs.create_index([("group_id", pymongo.ASCENDING), 
+                              ("timestamp", pymongo.DESCENDING)])
     
     def add_user(self, user_id: int, user_data: Dict[str, Any]) -> None:
         """Add or update a user in the database."""
@@ -56,9 +81,10 @@ class Database:
     
     def update_group_setting(self, group_id: int, setting: str, value: Any) -> None:
         """Update a specific group setting."""
+        update_data = {setting: value, 'updated_at': datetime.now()}
         self.groups.update_one(
             {'group_id': group_id},
-            {'$set': {setting: value, 'updated_at': datetime.now()}},
+            {'$set': update_data},
             upsert=True
         )
     
