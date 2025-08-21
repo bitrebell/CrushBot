@@ -142,7 +142,7 @@ async def load_plugins():
             if filename.endswith(".py") and not filename.startswith("__"):
                 plugin_name = filename[:-3]
                 try:
-                    exec(f"from plugins.{plugin_name} import *")
+                    __import__(f"plugins.{plugin_name}")
                     logger.info(f"✅ Loaded plugin: {plugin_name}")
                 except Exception as e:
                     logger.error(f"❌ Failed to load plugin {plugin_name}: {e}")

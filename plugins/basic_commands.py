@@ -8,10 +8,7 @@ import sys
 import os
 
 # Add parent directory to path for imports
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from utils.helpers import get_system_info, get_bot_uptime, typing_effect
-from utils.formatters import get_text_stats
 
 @Client.on_message(filters.command("id", prefixes="."))
 async def get_id(client: Client, message: Message):

@@ -5,61 +5,16 @@ Utility commands plugin for CrushBot
 from pyrogram import Client, filters
 from pyrogram.types import Message
 import aiohttp
-import asyncio
 import qrcode
 import io
-import os
-from datetime import datetime
+import base64
+import hashlib
 import speedtest
-
-@Client.on_message(filters.command("weather", prefixes="."))
-async def weather_command(client: Client, message: Message):
-    """Get weather information"""
-    if len(message.command) < 2:
-        await message.edit_text("❌ Usage: `.weather <city>`")
-        return
-    
-    city = message.text.split(None, 1)[1]
-    api_key = os.getenv("WEATHER_API_KEY")
-    
-    if not api_key:
-        await message.edit_text("❌ Weather API key not configured")
-        return
-    
-    try:
-        await message.edit_text("🌤️ Getting weather data...")
-        
-        async with aiohttp.ClientSession() as session:
-            url = f"http://api.openweathermap.org/data/2.5/weather?q={city}&appid={api_key}&units=metric"
-            async with session.get(url) as response:
-                if response.status == 200:
-                    data = await response.json()
-                    
-                    temp = data['main']['temp']
-                    feels_like = data['main']['feels_like']
-                    humidity = data['main']['humidity']
-                    pressure = data['main']['pressure']
-                    description = data['weather'][0]['description'].title()
-                    wind_speed = data['wind']['speed']
-                    
-                    weather_text = f"""
-🌤️ **Weather in {city.title()}**
-
-**Temperature:** `{temp}°C` (feels like `{feels_like}°C`)
-**Condition:** `{description}`
-**Humidity:** `{humidity}%`
-**Pressure:** `{pressure} hPa`
-**Wind Speed:** `{wind_speed} m/s`
-                    """
-                    
-                    await message.edit_text(weather_text.strip())
-                else:
-                    await message.edit_text("❌ City not found")
-    except Exception as e:
-        await message.edit_text(f"❌ Error fetching weather: {str(e)}")
+from datetime import datetime
+import asyncio
 
 @Client.on_message(filters.command("qr", prefixes="."))
-async def qr_generator(client: Client, message: Message):
+async def qr_code_generator(client: Client, message: Message):
     """Generate QR code"""
     if len(message.command) < 2:
         await message.edit_text("❌ Usage: `.qr <text>`")
@@ -70,96 +25,63 @@ async def qr_generator(client: Client, message: Message):
     try:
         await message.edit_text("📱 Generating QR code...")
         
-        # Create QR code
-        qr = qrcode.QRCode(
-            version=1,
-            error_correction=qrcode.constants.ERROR_CORRECT_L,
-            box_size=10,
-            border=4,
-        )
+        # Generate QR code
+        qr = qrcode.QRCode(version=1, box_size=10, border=5)
         qr.add_data(text)
         qr.make(fit=True)
         
-        # Create image
+        # Create QR code image
         img = qr.make_image(fill_color="black", back_color="white")
         
         # Save to bytes
-        bio = io.BytesIO()
-        img.save(bio, format='PNG')
-        bio.seek(0)
+        output = io.BytesIO()
+        img.save(output, 'PNG')
+        output.seek(0)
         
-        # Send photo
+        # Send QR code
         await message.delete()
         await client.send_photo(
             chat_id=message.chat.id,
-            photo=bio,
-            caption=f"📱 **QR Code for:**\n`{text}`"
+            photo=output,
+            caption=f"📱 **QR Code for:** `{text}`"
         )
         
     except Exception as e:
         await message.edit_text(f"❌ Error generating QR code: {str(e)}")
 
-@Client.on_message(filters.command("shorturl", prefixes="."))
-async def shorten_url(client: Client, message: Message):
-    """Shorten URL using is.gd"""
-    if len(message.command) < 2:
-        await message.edit_text("❌ Usage: `.shorturl <url>`")
-        return
-    
-    url = message.command[1]
-    
-    try:
-        await message.edit_text("🔗 Shortening URL...")
-        
-        async with aiohttp.ClientSession() as session:
-            api_url = f"https://is.gd/create.php?format=simple&url={url}"
-            async with session.get(api_url) as response:
-                if response.status == 200:
-                    short_url = await response.text()
-                    if short_url.startswith("http"):
-                        await message.edit_text(f"🔗 **Original:** {url}\n\n🔗 **Shortened:** {short_url}")
-                    else:
-                        await message.edit_text(f"❌ Error: {short_url}")
-                else:
-                    await message.edit_text("❌ Failed to shorten URL")
-    except Exception as e:
-        await message.edit_text(f"❌ Error: {str(e)}")
-
 @Client.on_message(filters.command("speed", prefixes="."))
 async def speed_test(client: Client, message: Message):
-    """Test internet speed"""
+    """Internet speed test"""
     try:
-        await message.edit_text("🚀 Testing internet speed...")
+        await message.edit_text("🌐 Running speed test...")
         
-        # This might take a while, so we'll do it in a separate thread
-        def run_speedtest():
-            st = speedtest.Speedtest()
-            st.get_best_server()
-            
-            download_speed = st.download() / 1_000_000  # Convert to Mbps
-            upload_speed = st.upload() / 1_000_000      # Convert to Mbps
-            ping = st.results.ping
-            
-            return download_speed, upload_speed, ping
+        st = speedtest.Speedtest()
+        st.get_best_server()
         
-        # Run in executor to avoid blocking
-        loop = asyncio.get_event_loop()
-        download, upload, ping = await loop.run_in_executor(None, run_speedtest)
+        await message.edit_text("�� Testing download speed...")
+        download_speed = st.download() / 1024 / 1024  # Convert to Mbps
         
-        speed_text = f"""
-🚀 **Internet Speed Test**
+        await message.edit_text("📤 Testing upload speed...")
+        upload_speed = st.upload() / 1024 / 1024  # Convert to Mbps
+        
+        await message.edit_text("🏓 Testing ping...")
+        ping = st.results.ping
+        
+        result = f"""
+🌐 **Speed Test Results**
 
-**Download:** `{download:.2f} Mbps`
-**Upload:** `{upload:.2f} Mbps`
-**Ping:** `{ping:.2f} ms`
+📥 **Download:** `{download_speed:.2f} Mbps`
+📤 **Upload:** `{upload_speed:.2f} Mbps`
+🏓 **Ping:** `{ping:.2f} ms`
 
-**Server:** Speedtest.net
+**Server:** `{st.results.server['sponsor']} - {st.results.server['name']}`
+**Location:** `{st.results.server['country']}`
         """
         
-        await message.edit_text(speed_text.strip())
+        await message.edit_text(result.strip())
         
     except Exception as e:
-        await message.edit_text(f"❌ Error testing speed: {str(e)}")
+        await message.edit_text(f"❌ Error running speed test: {str(e)}")
 
 @Client.on_message(filters.command("time", prefixes="."))
 async def current_time(client: Client, message: Message):
@@ -167,12 +89,13 @@ async def current_time(client: Client, message: Message):
     now = datetime.now()
     
     time_text = f"""
-🕐 **Current Time**
+🕐 **Current Time & Date**
 
-**Date:** `{now.strftime('%Y-%m-%d')}`
-**Time:** `{now.strftime('%H:%M:%S')}`
+**Date:** `{now.strftime('%A, %B %d, %Y')}`
+**Time:** `{now.strftime('%I:%M:%S %p')}`
+**24H Format:** `{now.strftime('%H:%M:%S')}`
 **Timezone:** `{now.strftime('%Z')}`
-**Weekday:** `{now.strftime('%A')}`
+
 **Unix Timestamp:** `{int(now.timestamp())}`
     """
     
@@ -188,14 +111,17 @@ async def calculator(client: Client, message: Message):
     expression = message.text.split(None, 1)[1]
     
     try:
-        # Basic security check
+        # Replace common symbols
+        expression = expression.replace('x', '*').replace('÷', '/')
+        
+        # Evaluate safely (only allow basic math operations)
         allowed_chars = set('0123456789+-*/.() ')
         if not all(c in allowed_chars for c in expression):
             await message.edit_text("❌ Invalid characters in expression")
             return
         
         result = eval(expression)
-        await message.edit_text(f"🧮 **Calculator**\n\n`{expression}` = `{result}`")
+        await message.edit_text(f"🧮 **Calculator**\n\n`{expression}` = **`{result}`**")
         
     except ZeroDivisionError:
         await message.edit_text("❌ Error: Division by zero")
@@ -203,55 +129,145 @@ async def calculator(client: Client, message: Message):
         await message.edit_text(f"❌ Error: Invalid expression")
 
 @Client.on_message(filters.command("base64", prefixes="."))
-async def base64_encode_decode(client: Client, message: Message):
-    """Encode/decode base64"""
+async def base64_operations(client: Client, message: Message):
+    """Base64 encode/decode"""
     if len(message.command) < 3:
-        await message.edit_text("❌ Usage: `.base64 <encode|decode> <text>`")
+        await message.edit_text("❌ Usage: `.base64 <encode/decode> <text>`")
         return
     
-    action = message.command[1].lower()
+    operation = message.command[1].lower()
     text = message.text.split(None, 2)[2]
     
     try:
-        import base64
-        
-        if action == "encode":
-            encoded = base64.b64encode(text.encode()).decode()
-            await message.edit_text(f"🔐 **Base64 Encoded:**\n`{encoded}`")
-        elif action == "decode":
-            decoded = base64.b64decode(text.encode()).decode()
-            await message.edit_text(f"🔓 **Base64 Decoded:**\n`{decoded}`")
+        if operation == "encode":
+            encoded = base64.b64encode(text.encode('utf-8')).decode('utf-8')
+            await message.edit_text(f"🔐 **Base64 Encoded:**\n\n`{encoded}`")
+        elif operation == "decode":
+            decoded = base64.b64decode(text.encode('utf-8')).decode('utf-8')
+            await message.edit_text(f"🔓 **Base64 Decoded:**\n\n`{decoded}`")
         else:
             await message.edit_text("❌ Use 'encode' or 'decode'")
-            
     except Exception as e:
         await message.edit_text(f"❌ Error: {str(e)}")
 
 @Client.on_message(filters.command("hash", prefixes="."))
-async def hash_text(client: Client, message: Message):
+async def hash_generator(client: Client, message: Message):
     """Generate hash of text"""
     if len(message.command) < 3:
-        await message.edit_text("❌ Usage: `.hash <md5|sha1|sha256> <text>`")
+        await message.edit_text("❌ Usage: `.hash <md5/sha1/sha256> <text>`")
         return
     
     hash_type = message.command[1].lower()
     text = message.text.split(None, 2)[2]
     
     try:
-        import hashlib
-        
         if hash_type == "md5":
-            hash_obj = hashlib.md5(text.encode())
+            hash_obj = hashlib.md5(text.encode('utf-8'))
         elif hash_type == "sha1":
-            hash_obj = hashlib.sha1(text.encode())
+            hash_obj = hashlib.sha1(text.encode('utf-8'))
         elif hash_type == "sha256":
-            hash_obj = hashlib.sha256(text.encode())
+            hash_obj = hashlib.sha256(text.encode('utf-8'))
         else:
             await message.edit_text("❌ Supported: md5, sha1, sha256")
             return
         
         hash_value = hash_obj.hexdigest()
-        await message.edit_text(f"🔐 **{hash_type.upper()} Hash:**\n`{hash_value}`")
+        
+        result = f"""
+🔐 **Hash Generator**
+
+**Algorithm:** `{hash_type.upper()}`
+**Text:** `{text}`
+**Hash:** `{hash_value}`
+        """
+        
+        await message.edit_text(result.strip())
         
     except Exception as e:
         await message.edit_text(f"❌ Error: {str(e)}")
+
+@Client.on_message(filters.command("shorturl", prefixes="."))
+async def url_shortener(client: Client, message: Message):
+    """Shorten URL using a free service"""
+    if len(message.command) < 2:
+        await message.edit_text("❌ Usage: `.shorturl <url>`")
+        return
+    
+    url = message.text.split(None, 1)[1]
+    
+    try:
+        await message.edit_text("🔗 Shortening URL...")
+        
+        # Using is.gd free URL shortener
+        api_url = "https://is.gd/create.php"
+        params = {
+            'format': 'simple',
+            'url': url
+        }
+        
+        async with aiohttp.ClientSession() as session:
+            async with session.get(api_url, params=params) as response:
+                if response.status == 200:
+                    short_url = await response.text()
+                    
+                    result = f"""
+🔗 **URL Shortened**
+
+**Original:** `{url}`
+**Shortened:** `{short_url}`
+                    """
+                    
+                    await message.edit_text(result.strip())
+                else:
+                    await message.edit_text("❌ Failed to shorten URL")
+                    
+    except Exception as e:
+        await message.edit_text(f"❌ Error: {str(e)}")
+
+@Client.on_message(filters.command("weather", prefixes="."))
+async def weather_info(client: Client, message: Message):
+    """Get weather information"""
+    if len(message.command) < 2:
+        await message.edit_text("❌ Usage: `.weather <city>`")
+        return
+    
+    city = message.text.split(None, 1)[1]
+    
+    try:
+        await message.edit_text("🌤️ Getting weather information...")
+        
+        # Using OpenWeatherMap free API (requires API key)
+        api_key = "your_api_key_here"  # Replace with actual API key
+        url = f"http://api.openweathermap.org/data/2.5/weather"
+        params = {
+            'q': city,
+            'appid': api_key,
+            'units': 'metric'
+        }
+        
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, params=params) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    
+                    weather = data['weather'][0]
+                    main = data['main']
+                    wind = data['wind']
+                    
+                    result = f"""
+🌤️ **Weather for {data['name']}, {data['sys']['country']}**
+
+**Temperature:** `{main['temp']}°C` (feels like `{main['feels_like']}°C`)
+**Condition:** `{weather['main']} - {weather['description']}`
+**Humidity:** `{main['humidity']}%`
+**Pressure:** `{main['pressure']} hPa`
+**Wind Speed:** `{wind.get('speed', 'N/A')} m/s`
+**Visibility:** `{data.get('visibility', 'N/A')} m`
+                    """
+                    
+                    await message.edit_text(result.strip())
+                else:
+                    await message.edit_text("❌ City not found or API error")
+                    
+    except Exception as e:
+        await message.edit_text("❌ Weather API not configured or error occurred")

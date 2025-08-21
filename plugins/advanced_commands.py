@@ -1,12 +1,9 @@
-"""
-Advanced commands plugin for CrushBot
-"""
-
 from pyrogram import Client, filters
 from pyrogram.types import Message
 import asyncio
 import aiohttp
 from pyrogram.errors import FloodWait
+import random
 import time
 
 # Global variables for advanced features
