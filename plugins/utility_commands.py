@@ -125,8 +125,8 @@ async def calculator(client: Client, message: Message):
         
     except ZeroDivisionError:
         await message.edit_text("❌ Error: Division by zero")
-    except Exception as e:
-        await message.edit_text(f"❌ Error: Invalid expression")
+    except Exception:
+        await message.edit_text("❌ Error: Invalid expression")
 
 @Client.on_message(filters.command("base64", prefixes="."))
 async def base64_operations(client: Client, message: Message):

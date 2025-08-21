@@ -133,7 +133,7 @@ async def restart_command(client: Client, message: Message):
     os.execl(sys.executable, sys.executable, *sys.argv)
 
 # Load all plugins
-async def load_plugins():
+def load_plugins():
     """Load all plugin files"""
     plugin_dir = "plugins"
     if os.path.exists(plugin_dir):
@@ -149,7 +149,7 @@ async def load_plugins():
 async def main():
     """Main function to start the bot"""
     try:
-        await load_plugins()
+        load_plugins()
         await app.start()
         logger.info("🚀 CrushBot is now running!")
         print(f"{Fore.GREEN}✅ Bot started successfully!{Style.RESET_ALL}")
