@@ -95,7 +95,6 @@ async def help_command(client: Client, message: Message):
 `.blur <amount>` - Blur an image
 
 **🌐 Utility Commands:**
-`.weather <city>` - Get weather information
 `.qr <text>` - Generate QR code
 `.shorturl <url>` - Shorten URL
 `.ytdl <url>` - Download YouTube video info

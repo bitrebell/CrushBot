@@ -39,7 +39,6 @@ CrushBot is a powerful and feature-rich Telegram userbot built with Pyrogram. It
 - `.fortune` - Fortune cookie messages
 
 ### 🌐 Utility Commands
-- `.weather <city>` - Get weather information
 - `.qr <text>` - Generate QR code
 - `.shorturl <url>` - Shorten URLs
 - `.speed` - Internet speed test
@@ -81,7 +80,6 @@ API_HASH=your_api_hash
 PHONE_NUMBER=your_phone_number
 
 # Optional - For advanced features
-WEATHER_API_KEY=your_openweather_api_key
 YOUTUBE_API_KEY=your_youtube_api_key
 ADMIN_ID=your_telegram_user_id
 ```
@@ -95,8 +93,6 @@ ADMIN_ID=your_telegram_user_id
 4. Create a new application
 5. Copy API_ID and API_HASH
 
-#### Weather API (Optional)
-1. Go to https://openweathermap.org/api
 2. Sign up for a free account
 3. Get your API key from the dashboard
 
@@ -138,7 +134,6 @@ CrushBot/
 | API_HASH | Yes | Telegram API Hash |
 | PHONE_NUMBER | Yes | Your phone number |
 | SESSION_STRING | No | Session string (alternative to phone login) |
-| WEATHER_API_KEY | No | OpenWeatherMap API key |
 | YOUTUBE_API_KEY | No | YouTube Data API key |
 | ADMIN_ID | No | Your Telegram user ID |
 
