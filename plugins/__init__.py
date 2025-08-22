@@ -1,3 +1,0 @@
-"""
-CrushBot Plugins
-"""
