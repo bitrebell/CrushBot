@@ -1,5 +1,6 @@
 import os
 import logging
+import aiofiles
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     Application,
@@ -208,24 +209,25 @@ async def download_track(query, track_id: str) -> None:
                 "❌ Download failed. The track might not be available."
             )
             return
-        
         # Send audio file
         await query.edit_message_text("📤 Uploading...")
         
-        with open(file_path, 'rb') as audio:
+        async with aiofiles.open(file_path, 'rb') as audio:
+            audio_bytes = await audio.read()
             await query.message.reply_audio(
-                audio=audio,
+                audio=audio_bytes,
                 title=track_info['name'],
                 performer=track_info['artist'],
                 duration=track_info['duration_seconds']
             )
         
         await query.edit_message_text("✅ Download complete!")
+        await query.edit_message_text("✅ Download complete!")
         
         # Clean up downloaded file
         try:
             os.remove(file_path)
-        except:
+        except Exception:
             pass
             
     except Exception as e:
@@ -235,7 +237,7 @@ async def download_track(query, track_id: str) -> None:
         )
 
 
-async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Log errors caused by updates."""
     logger.error(f"Update {update} caused error {context.error}")
 
