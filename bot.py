@@ -213,9 +213,10 @@ async def download_track(query, track_id: str) -> None:
         # Send audio file
         await query.edit_message_text("📤 Uploading...")
         
-        with open(file_path, 'rb') as audio:
+        async with aiofiles.open(file_path, 'rb') as audio:
+            audio_data = await audio.read()
             await query.message.reply_audio(
-                audio=audio,
+                audio=audio_data,
                 title=track_info['name'],
                 performer=track_info['artist'],
                 duration=track_info['duration_seconds']
