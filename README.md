@@ -107,18 +107,25 @@ Once the bot is running, you can interact with it on Telegram:
 - `/start` - Display welcome message
 - `/help` - Show help information
 - `/search <song name>` - Search for songs
+- `/play <song name>` - Play a song in voice chat
+- `/stop` - Stop playback and leave voice chat
 - Send any text - Will be treated as a search query
-- Send a Spotify track link - Get track info and download option
+- Send a Spotify track link - Get track info and play option
 
 ### Examples
 
+**Play a song in voice chat:**
+```
+/play Bohemian Rhapsody
+```
+
 **Search for a song:**
 ```
-/search Bohemian Rhapsody
+/search Shape of You
 ```
 or simply send:
 ```
-Bohemian Rhapsody Queen
+Shape of You Ed Sheeran
 ```
 
 **Use Spotify link:**
@@ -126,17 +133,22 @@ Bohemian Rhapsody Queen
 https://open.spotify.com/track/4u7EnebtmKWzUH433cf5Qv
 ```
 
+**Stop playback:**
+```
+/stop
+```
+
 ## Project Structure
 
 ```
 CrushBot/
 ├── bot.py                 # Main bot application
-├── spotify_handler.py     # Spotify integration and download logic
+├── spotify_handler.py     # Spotify integration and music handling
 ├── requirements.txt       # Python dependencies
 ├── .env.example          # Environment variables template
 ├── .env                  # Your environment variables (create this)
 ├── .gitignore           # Git ignore rules
-├── downloads/           # Downloaded music files (auto-created)
+├── downloads/           # Temporary music files (auto-created)
 └── README.md           # This file
 ```
 
@@ -144,15 +156,16 @@ CrushBot/
 
 1. **Search**: The bot uses Spotify's API to search for tracks
 2. **Display**: Results are shown with inline buttons
-3. **Download**: When you click download, the bot uses `spotdl` to fetch the audio from YouTube
-4. **Upload**: The downloaded file is sent to you as a Telegram audio message
-5. **Cleanup**: Downloaded files are automatically deleted after sending
+3. **Download**: When you click play, the bot temporarily downloads the track using `spotdl`
+4. **Stream**: The bot joins your voice chat and streams the audio
+5. **Cleanup**: Downloaded files are automatically deleted after playback
 
 ## Dependencies
 
 - `python-telegram-bot` - Telegram Bot API wrapper
 - `spotipy` - Spotify Web API wrapper
 - `spotdl` - Download songs from Spotify (via YouTube)
+- `py-tgcalls` - Telegram voice chat integration
 - `python-dotenv` - Environment variable management
 - `pydub` - Audio processing
 - `requests` - HTTP library
@@ -164,10 +177,16 @@ CrushBot/
 - Ensure the bot is running (`python bot.py`)
 - Check the console for error messages
 
-### Downloads fail
+### Can't play in voice chat
+- Make sure there's an active voice chat in the group
+- Verify the bot has permission to join voice chats
+- Add the bot as an admin with voice chat permissions
+- Ensure you're using the bot in a group, not in a private chat
+
+### Music playback fails
 - Verify your Spotify API credentials are correct
 - Check your internet connection
-- Some songs may not be available for download
+- Some songs may not be available
 
 ### "TELEGRAM_BOT_TOKEN not found" error
 - Make sure you created the `.env` file
@@ -176,8 +195,10 @@ CrushBot/
 
 ## Notes
 
-- Downloaded music is temporarily stored in the `downloads/` directory
-- Files are automatically deleted after being sent to maintain disk space
+- Music files are temporarily stored in the `downloads/` directory for streaming
+- Files are automatically deleted after playback to maintain disk space
+- The bot must be added to a group with voice chat capabilities
+- Make sure to give the bot admin permissions for voice chat access
 - The bot downloads audio from YouTube based on Spotify metadata
 - Download quality depends on source availability
 
