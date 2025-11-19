@@ -33,6 +33,9 @@ downloads/
 *.webm
 *.mkv
 
+# Cookies
+cookies.txt
+
 # Session files
 *.session
 *.session-journal
