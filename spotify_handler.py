@@ -39,10 +39,17 @@ class SpotifyHandler:
         
         # Initialize Spotdl
         try:
+            # Configure downloader settings
+            downloader_settings = {
+                "output": self.download_dir,
+                "format": "mp3",
+                "save_file": None,
+            }
+            
             self.spotdl = Spotdl(
                 client_id=client_id,
                 client_secret=client_secret,
-                download_dir=self.download_dir
+                downloader_settings=downloader_settings
             )
             logger.info("Spotdl initialized successfully")
         except Exception as e:
@@ -171,7 +178,7 @@ class SpotifyHandler:
             spotify_url = track_info['spotify_url']
             logger.info(f"Downloading: {track_info['name']} - {track_info['artist']}")
             
-            # Download the track
+            # Download the track using spotdl
             songs = self.spotdl.search([spotify_url])
             
             if not songs:
@@ -179,15 +186,20 @@ class SpotifyHandler:
                 return None
             
             # Download and get file path
-            downloaded_files, errors = self.spotdl.download_songs(songs)
+            results, errors = self.spotdl.download_songs(songs)
             
             if errors:
                 logger.error(f"Download errors: {errors}")
             
-            if downloaded_files:
-                file_path = downloaded_files[0]
-                logger.info(f"Downloaded to: {file_path}")
-                return file_path
+            if results:
+                # Results is a list of paths
+                file_path = str(results[0])
+                if file_path and os.path.exists(file_path):
+                    logger.info(f"Downloaded to: {file_path}")
+                    return file_path
+                else:
+                    logger.error("Downloaded file not found")
+                    return None
             else:
                 logger.error("Download failed")
                 return None

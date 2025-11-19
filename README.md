@@ -17,25 +17,41 @@ A Python Telegram bot for searching, playing, and downloading music from Spotify
 Before you begin, ensure you have:
 
 1. **Python 3.8 or higher** installed
-2. **Telegram Bot Token** - Get it from [@BotFather](https://t.me/botfather)
-3. **Spotify API Credentials** - Get them from [Spotify Developer Dashboard](https://developer.spotify.com/dashboard)
+2. **FFmpeg** - Required for audio processing
+3. **Telegram Bot Token** - Get it from [@BotFather](https://t.me/botfather)
+4. **Spotify API Credentials** - Get them from [Spotify Developer Dashboard](https://developer.spotify.com/dashboard)
 
 ## Installation
 
-### 1. Clone the repository
+### 1. Install FFmpeg
+
+**Ubuntu/Debian:**
+```bash
+sudo apt-get update && sudo apt-get install -y ffmpeg
+```
+
+**macOS:**
+```bash
+brew install ffmpeg
+```
+
+**Windows:**
+Download from [ffmpeg.org](https://ffmpeg.org/download.html) and add to PATH
+
+### 2. Clone the repository
 
 ```bash
 git clone https://github.com/bitrebell/CrushBot.git
 cd CrushBot
 ```
 
-### 2. Install dependencies
+### 3. Install dependencies
 
 ```bash
 pip install -r requirements.txt
 ```
 
-### 3. Set up environment variables
+### 4. Set up environment variables
 
 Create a `.env` file in the project root:
 
