@@ -209,27 +209,37 @@ class SpotifyHandler:
                 logger.error("No songs found to download")
                 return None
             
-            # Download using the async downloader
             song = songs[0]
+            logger.info(f"Found song: {song.name} by {song.artist}")
             
-            # Use spotdl's downloader to download the song
-            downloader = self.spotdl.downloader
+            # Use synchronous download in an executor to avoid event loop issues
+            loop = asyncio.get_event_loop()
             
-            # Download the song
-            result = await downloader.pool_download(song)
+            # Download using spotdl's synchronous download_songs method
+            def sync_download():
+                try:
+                    songs_list = [song]
+                    results = self.spotdl.download_songs(songs_list)
+                    return results
+                except Exception as e:
+                    logger.error(f"Sync download error: {e}")
+                    return None, [str(e)]
             
-            if result:
-                # Get the file path from the result
-                file_path = str(result)
-                if os.path.exists(file_path):
-                    logger.info(f"Downloaded to: {file_path}")
-                    return file_path
-                else:
-                    logger.error("Downloaded file not found")
-                    return None
-            else:
-                logger.error("Download failed")
-                return None
+            # Run in executor
+            results = await loop.run_in_executor(None, sync_download)
+            
+            if results and results[0]:
+                # results is (list of paths, list of errors)
+                downloaded_files = results[0] if isinstance(results, tuple) else results
+                
+                if downloaded_files:
+                    file_path = str(downloaded_files[0])
+                    if os.path.exists(file_path):
+                        logger.info(f"Downloaded to: {file_path}")
+                        return file_path
+                
+            logger.error("Downloaded file not found")
+            return None
                 
         except Exception as e:
             logger.error(f"Download async error: {e}")
