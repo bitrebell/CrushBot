@@ -9,6 +9,7 @@ from telegram.ext import (
     ContextTypes,
     filters,
 )
+from pyrogram import Client
 from pytgcalls import PyTgCalls
 from dotenv import load_dotenv
 from spotify_handler import SpotifyHandler
@@ -30,7 +31,8 @@ spotify_handler = SpotifyHandler(
     download_dir=os.getenv('DOWNLOAD_DIR', './downloads')
 )
 
-# Global PyTgCalls instance (will be initialized in main)
+# Global Pyrogram client and PyTgCalls instance (will be initialized in main)
+pyrogram_client = None
 pytgcalls = None
 
 
@@ -346,20 +348,35 @@ def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 def main() -> None:
     """Start the bot."""
-    global pytgcalls
+    global pyrogram_client, pytgcalls
     
-    # Get token from environment
+    # Get tokens from environment
     token = os.getenv('TELEGRAM_BOT_TOKEN')
+    api_id = os.getenv('API_ID')
+    api_hash = os.getenv('API_HASH')
     
     if not token:
         logger.error("TELEGRAM_BOT_TOKEN not found in environment variables!")
         return
     
+    if not api_id or not api_hash:
+        logger.error("API_ID and API_HASH are required for voice chat functionality!")
+        logger.error("Get them from https://my.telegram.org/apps")
+        return
+    
+    # Create Pyrogram client for voice chat
+    pyrogram_client = Client(
+        "crushbot_session",
+        api_id=api_id,
+        api_hash=api_hash,
+        bot_token=token
+    )
+    
     # Create application
     application = Application.builder().token(token).build()
     
-    # Initialize PyTgCalls
-    pytgcalls = PyTgCalls(application)
+    # Initialize PyTgCalls with Pyrogram client
+    pytgcalls = PyTgCalls(pyrogram_client)
     
     # Add handlers
     application.add_handler(CommandHandler("start", start))
@@ -373,12 +390,18 @@ def main() -> None:
     # Add error handler
     application.add_error_handler(error_handler)
     
-    # Start PyTgCalls
+    # Start Pyrogram client and PyTgCalls
+    logger.info("Starting Pyrogram client...")
+    pyrogram_client.start()
     pytgcalls.start()
     
     # Start the bot
     logger.info("Bot is starting...")
-    application.run_polling(allowed_updates=Update.ALL_TYPES)
+    try:
+        application.run_polling(allowed_updates=Update.ALL_TYPES)
+    finally:
+        # Stop Pyrogram client on exit
+        pyrogram_client.stop()
 
 
 if __name__ == '__main__':

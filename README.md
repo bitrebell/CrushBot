@@ -65,6 +65,10 @@ Edit `.env` and add your credentials:
 # Telegram Bot Configuration
 TELEGRAM_BOT_TOKEN=your_telegram_bot_token_here
 
+# Telegram API Configuration (for voice chat)
+API_ID=your_api_id_here
+API_HASH=your_api_hash_here
+
 # Spotify API Configuration
 SPOTIFY_CLIENT_ID=your_spotify_client_id_here
 SPOTIFY_CLIENT_SECRET=your_spotify_client_secret_here
@@ -82,6 +86,17 @@ DOWNLOAD_DIR=./downloads
 3. Follow the instructions to create your bot
 4. Copy the token provided by BotFather
 5. Paste it in your `.env` file as `TELEGRAM_BOT_TOKEN`
+
+### Telegram API ID and API Hash
+
+**Required for voice chat functionality:**
+
+1. Go to [https://my.telegram.org/apps](https://my.telegram.org/apps)
+2. Log in with your phone number
+3. Click on "API development tools"
+4. Fill in the application details (you can use any app title and short name)
+5. Copy the **API ID** (App api_id) and **API Hash** (App api_hash)
+6. Paste them in your `.env` file as `API_ID` and `API_HASH`
 
 ### Spotify API Credentials
 
