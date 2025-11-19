@@ -212,37 +212,45 @@ class SpotifyHandler:
             song = songs[0]
             logger.info(f"Found song: {song.name} by {song.artist}")
             
-            # Use synchronous download in an executor to avoid event loop issues
-            loop = asyncio.get_event_loop()
-            
-            # Download using spotdl's synchronous download_songs method
-            def sync_download():
-                try:
-                    songs_list = [song]
-                    results = self.spotdl.download_songs(songs_list)
-                    return results
-                except Exception as e:
-                    logger.error(f"Sync download error: {e}")
-                    return None, [str(e)]
-            
-            # Run in executor
-            results = await loop.run_in_executor(None, sync_download)
-            
-            if results and results[0]:
-                # results is (list of paths, list of errors)
-                downloaded_files = results[0] if isinstance(results, tuple) else results
+            # Use the downloader's pool_download method directly
+            try:
+                # Call pool_download which is an async method
+                result = await self.spotdl.downloader.pool_download(song)
                 
-                if downloaded_files:
-                    file_path = str(downloaded_files[0])
-                    if os.path.exists(file_path):
-                        logger.info(f"Downloaded to: {file_path}")
-                        return file_path
+                logger.info(f"Download completed, result type: {type(result)}")
                 
-            logger.error("Downloaded file not found")
-            return None
+                # The result should be the song object with download path
+                # Try to find the downloaded file in the output directory
+                from pathlib import Path
+                download_dir = Path(self.download_dir)
+                
+                if download_dir.exists():
+                    # Look for the most recent mp3 file
+                    mp3_files = list(download_dir.glob("*.mp3"))
+                    
+                    if mp3_files:
+                        # Get the most recently modified file
+                        latest_file = max(mp3_files, key=lambda p: p.stat().st_mtime)
+                        file_path = str(latest_file)
+                        
+                        if os.path.exists(file_path):
+                            logger.info(f"Downloaded to: {file_path}")
+                            return file_path
+                
+                logger.error("Downloaded file not found in directory")
+                return None
+                
+            except Exception as download_error:
+                logger.error(f"Download execution error: {download_error}")
+                import traceback
+                traceback.print_exc()
+                return None
                 
         except Exception as e:
             logger.error(f"Download async error: {e}")
+            import traceback
+            traceback.print_exc()
+            return None
             import traceback
             traceback.print_exc()
             return None

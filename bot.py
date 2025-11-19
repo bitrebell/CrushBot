@@ -1,6 +1,5 @@
 import os
 import logging
-import aiofiles
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     Application,
@@ -10,6 +9,7 @@ from telegram.ext import (
     ContextTypes,
     filters,
 )
+from pytgcalls import PyTgCalls
 from dotenv import load_dotenv
 from spotify_handler import SpotifyHandler
 
@@ -30,17 +30,22 @@ spotify_handler = SpotifyHandler(
     download_dir=os.getenv('DOWNLOAD_DIR', './downloads')
 )
 
+# Global PyTgCalls instance (will be initialized in main)
+pytgcalls = None
+
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Send a message when the command /start is issued."""
     welcome_message = (
         "🎵 *Welcome to CrushBot Music Bot!* 🎵\n\n"
-        "I can help you search and download music from Spotify.\n\n"
+        "I can play music in voice chats from Spotify!\n\n"
         "*Commands:*\n"
         "/start - Show this welcome message\n"
         "/search <song name> - Search for a song\n"
+        "/play <song name> - Play song in voice chat\n"
+        "/stop - Stop playback\n"
         "/help - Show help information\n\n"
-        "Just send me a song name or Spotify link, and I'll handle the rest!"
+        "Just send me a song name or Spotify link!"
     )
     await update.message.reply_text(welcome_message, parse_mode='Markdown')
 
@@ -50,16 +55,18 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     help_text = (
         "*CrushBot Help* 🎵\n\n"
         "*How to use:*\n"
-        "1. Send me a song name (e.g., 'Bohemian Rhapsody Queen')\n"
-        "2. Use /search command (e.g., /search Shape of You)\n"
-        "3. Send a Spotify track link\n\n"
+        "1. Add me to a group\n"
+        "2. Start a voice chat\n"
+        "3. Use /play <song name> to play music\n\n"
         "*Commands:*\n"
         "/start - Welcome message\n"
         "/search <query> - Search for songs\n"
+        "/play <song name> - Play in voice chat\n"
+        "/stop - Stop playback\n"
         "/help - This help message\n\n"
         "*Features:*\n"
         "✅ Search Spotify tracks\n"
-        "✅ Download high-quality music\n"
+        "✅ Play in voice chats\n"
         "✅ Get track information\n"
     )
     await update.message.reply_text(help_text, parse_mode='Markdown')
@@ -75,6 +82,94 @@ async def search_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
     query = ' '.join(context.args)
     await search_music(update, query)
+
+
+async def play_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle the /play command to play a song in voice chat."""
+    if not context.args:
+        await update.message.reply_text(
+            "Please provide a song name.\nExample: /play Bohemian Rhapsody"
+        )
+        return
+
+    query = ' '.join(context.args)
+    await update.message.reply_text(f"🔍 Searching for: *{query}*...", parse_mode='Markdown')
+    
+    try:
+        # Search for the track
+        results = spotify_handler.search_tracks(query, limit=1)
+        
+        if not results:
+            await update.message.reply_text("❌ No results found. Please try a different search query.")
+            return
+        
+        track = results[0]
+        track_id = track['id']
+        
+        await update.message.reply_text("🎵 Preparing to play... Please wait.")
+        
+        # Get track info
+        track_info = spotify_handler.get_track_by_id(track_id)
+        
+        if not track_info:
+            await update.message.reply_text("❌ Track not found.")
+            return
+        
+        # Download track temporarily for streaming
+        file_path = await spotify_handler.download_track(track_id)
+        
+        if not file_path or not os.path.exists(file_path):
+            await update.message.reply_text(
+                "❌ Failed to prepare track. It might not be available."
+            )
+            return
+        
+        # Check if bot is in a voice chat
+        chat_id = update.message.chat_id
+        
+        try:
+            # Join voice chat and play
+            await pytgcalls.play(
+                chat_id,
+                file_path
+            )
+            
+            await update.message.reply_text(
+                f"▶️ Now playing: *{track_info['name']}* by {track_info['artist']}",
+                parse_mode='Markdown'
+            )
+        except Exception as vc_error:
+            logger.error(f"Voice chat error: {vc_error}")
+            await update.message.reply_text(
+                "❌ Failed to play in voice chat. Make sure:\n"
+                "1. There's an active voice chat\n"
+                "2. I have permission to join"
+            )
+            # Clean up file
+            try:
+                os.remove(file_path)
+            except Exception:
+                pass
+            
+    except Exception as e:
+        logger.error(f"Play command error: {e}")
+        await update.message.reply_text(
+            "❌ An error occurred. Please try again."
+        )
+
+
+async def stop_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle the /stop command to stop playback."""
+    chat_id = update.message.chat_id
+    
+    try:
+        await pytgcalls.leave_call(chat_id)
+        await update.message.reply_text("⏹️ Playback stopped and left voice chat.")
+    except Exception as e:
+        logger.error(f"Stop command error: {e}")
+        await update.message.reply_text(
+            "❌ I'm not currently in a voice chat or an error occurred."
+        )
 
 
 async def search_music(update: Update, query: str) -> None:
@@ -107,11 +202,11 @@ async def search_music(update: Update, query: str) -> None:
                 f"   Duration: {duration}\n\n"
             )
             
-            # Add download button
+            # Add play button
             keyboard.append([
                 InlineKeyboardButton(
-                    f"⬇️ Download #{idx}",
-                    callback_data=f"download_{track['id']}"
+                    f"▶️ Play #{idx}",
+                    callback_data=f"play_{track['id']}"
                 )
             ])
         
@@ -162,8 +257,8 @@ async def handle_spotify_link(update: Update, spotify_url: str) -> None:
         
         keyboard = [[
             InlineKeyboardButton(
-                "⬇️ Download",
-                callback_data=f"download_{track_info['id']}"
+                "▶️ Play",
+                callback_data=f"play_{track_info['id']}"
             )
         ]]
         
@@ -184,14 +279,14 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     query = update.callback_query
     await query.answer()
     
-    if query.data.startswith('download_'):
-        track_id = query.data.replace('download_', '')
-        await download_track(query, track_id)
+    if query.data.startswith('play_'):
+        track_id = query.data.replace('play_', '')
+        await play_track(query, track_id)
 
 
-async def download_track(query, track_id: str) -> None:
-    """Download a track and send it to the user."""
-    await query.edit_message_text("⬇️ Downloading... Please wait.")
+async def play_track(query, track_id: str) -> None:
+    """Play a track in voice chat."""
+    await query.edit_message_text("🎵 Preparing to play... Please wait.")
     
     try:
         # Get track info
@@ -201,39 +296,46 @@ async def download_track(query, track_id: str) -> None:
             await query.edit_message_text("❌ Track not found.")
             return
         
-        # Download track using async method
+        # Download track temporarily for streaming
         file_path = await spotify_handler.download_track(track_id)
         
         if not file_path or not os.path.exists(file_path):
             await query.edit_message_text(
-                "❌ Download failed. The track might not be available."
+                "❌ Failed to prepare track. It might not be available."
             )
             return
         
-        # Send audio file
-        await query.edit_message_text("📤 Uploading...")
+        # Check if bot is in a voice chat
+        chat_id = query.message.chat_id
         
-        async with aiofiles.open(file_path, 'rb') as audio:
-            audio_data = await audio.read()
-            await query.message.reply_audio(
-                audio=audio_data,
-                title=track_info['name'],
-                performer=track_info['artist'],
-                duration=track_info['duration_seconds']
-            )
-        
-        await query.edit_message_text("✅ Download complete!")
-        
-        # Clean up downloaded file
         try:
-            os.remove(file_path)
-        except Exception:
-            pass
+            # Join voice chat and play
+            await pytgcalls.play(
+                chat_id,
+                file_path
+            )
+            
+            await query.edit_message_text(
+                f"▶️ Now playing: *{track_info['name']}* by {track_info['artist']}",
+                parse_mode='Markdown'
+            )
+        except Exception as vc_error:
+            logger.error(f"Voice chat error: {vc_error}")
+            await query.edit_message_text(
+                "❌ Failed to play in voice chat. Make sure:\n"
+                "1. There's an active voice chat\n"
+                "2. I have permission to join"
+            )
+            # Clean up file
+            try:
+                os.remove(file_path)
+            except Exception:
+                pass
             
     except Exception as e:
-        logger.error(f"Download error: {e}")
+        logger.error(f"Play error: {e}")
         await query.edit_message_text(
-            "❌ An error occurred during download. Please try again."
+            "❌ An error occurred. Please try again."
         )
 
 
@@ -244,6 +346,8 @@ def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 def main() -> None:
     """Start the bot."""
+    global pytgcalls
+    
     # Get token from environment
     token = os.getenv('TELEGRAM_BOT_TOKEN')
     
@@ -254,15 +358,23 @@ def main() -> None:
     # Create application
     application = Application.builder().token(token).build()
     
+    # Initialize PyTgCalls
+    pytgcalls = PyTgCalls(application)
+    
     # Add handlers
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("search", search_command))
+    application.add_handler(CommandHandler("play", play_command))
+    application.add_handler(CommandHandler("stop", stop_command))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     application.add_handler(CallbackQueryHandler(button_callback))
     
     # Add error handler
     application.add_error_handler(error_handler)
+    
+    # Start PyTgCalls
+    pytgcalls.start()
     
     # Start the bot
     logger.info("Bot is starting...")

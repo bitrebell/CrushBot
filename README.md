@@ -1,16 +1,16 @@
 # CrushBot 🎵
 
-A Python Telegram bot for searching, playing, and downloading music from Spotify.
+A Python Telegram bot for playing music in voice chats from Spotify.
 
 ## Features
 
 ✨ **Key Features:**
 - 🔍 Search for songs on Spotify
-- ⬇️ Download high-quality music
-- 🎵 Send audio files directly in Telegram
+- ▶️ Play music in Telegram voice chats
+- 🎵 High-quality audio streaming
 - 📋 Display track information (artist, album, duration)
 - 🔗 Support for Spotify track links
-- 💬 Interactive inline buttons for easy downloads
+- 💬 Interactive inline buttons for easy playback
 
 ## Prerequisites
 
