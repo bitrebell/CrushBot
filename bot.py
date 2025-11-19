@@ -201,27 +201,26 @@ async def download_track(query, track_id: str) -> None:
             await query.edit_message_text("❌ Track not found.")
             return
         
-        # Download track
-        file_path = spotify_handler.download_track(track_id)
+        # Download track using async method
+        file_path = await spotify_handler.download_track(track_id)
         
         if not file_path or not os.path.exists(file_path):
             await query.edit_message_text(
                 "❌ Download failed. The track might not be available."
             )
             return
+        
         # Send audio file
         await query.edit_message_text("📤 Uploading...")
         
-        async with aiofiles.open(file_path, 'rb') as audio:
-            audio_bytes = await audio.read()
+        with open(file_path, 'rb') as audio:
             await query.message.reply_audio(
-                audio=audio_bytes,
+                audio=audio,
                 title=track_info['name'],
                 performer=track_info['artist'],
                 duration=track_info['duration_seconds']
             )
         
-        await query.edit_message_text("✅ Download complete!")
         await query.edit_message_text("✅ Download complete!")
         
         # Clean up downloaded file

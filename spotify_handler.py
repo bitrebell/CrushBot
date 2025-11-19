@@ -1,11 +1,16 @@
 import os
 import logging
 from typing import List, Dict, Optional
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
 import spotipy
 from spotipy.oauth2 import SpotifyClientCredentials
 from spotdl import Spotdl
 
 logger = logging.getLogger(__name__)
+
+# Thread pool for running blocking operations
+_executor = ThreadPoolExecutor(max_workers=3)
 
 
 class SpotifyHandler:
@@ -154,7 +159,7 @@ class SpotifyHandler:
             logger.error(f"Error parsing Spotify URL: {e}")
             return None
     
-    def download_track(self, track_id: str) -> Optional[str]:
+    async def download_track(self, track_id: str) -> Optional[str]:
         """
         Download a track by Spotify ID.
         
@@ -178,23 +183,45 @@ class SpotifyHandler:
             spotify_url = track_info['spotify_url']
             logger.info(f"Downloading: {track_info['name']} - {track_info['artist']}")
             
-            # Download the track using spotdl
+            # Download the track using async method
+            result = await self._download_async(spotify_url)
+            return result
+                
+        except Exception as e:
+            logger.error(f"Download error: {e}")
+            return None
+    
+    async def _download_async(self, spotify_url: str) -> Optional[str]:
+        """
+        Download track asynchronously.
+        
+        Args:
+            spotify_url: Spotify track URL
+            
+        Returns:
+            Path to downloaded file or None
+        """
+        try:
+            # Search for the track
             songs = self.spotdl.search([spotify_url])
             
             if not songs:
                 logger.error("No songs found to download")
                 return None
             
-            # Download and get file path
-            results, errors = self.spotdl.download_songs(songs)
+            # Download using the async downloader
+            song = songs[0]
             
-            if errors:
-                logger.error(f"Download errors: {errors}")
+            # Use spotdl's downloader to download the song
+            downloader = self.spotdl.downloader
             
-            if results:
-                # Results is a list of paths
-                file_path = str(results[0])
-                if file_path and os.path.exists(file_path):
+            # Download the song
+            result = await downloader.pool_download(song)
+            
+            if result:
+                # Get the file path from the result
+                file_path = str(result)
+                if os.path.exists(file_path):
                     logger.info(f"Downloaded to: {file_path}")
                     return file_path
                 else:
@@ -205,7 +232,9 @@ class SpotifyHandler:
                 return None
                 
         except Exception as e:
-            logger.error(f"Download error: {e}")
+            logger.error(f"Download async error: {e}")
+            import traceback
+            traceback.print_exc()
             return None
     
     @staticmethod
