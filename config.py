@@ -52,7 +52,7 @@ class Settings:
     
     def __init__(self, config_file: str = None):
         self.config_file = config_file or Config.SETTINGS_FILE
-        self.settings = self._load_settings()
+        self._settings = self._load_settings()
     
     def _load_settings(self) -> Dict[str, Any]:
         """Load settings from file or create default"""
@@ -69,7 +69,7 @@ class Settings:
         """Save current settings to file"""
         try:
             with open(self.config_file, 'w') as f:
-                json.dump(self.settings, f, indent=4)
+                json.dump(self._settings, f, indent=4)
             return True
         except Exception as e:
             print(f"Error saving settings: {e}")
@@ -77,16 +77,16 @@ class Settings:
     
     def get(self, key: str, default: Any = None) -> Any:
         """Get a setting value"""
-        return self.settings.get(key, default)
+        return self._settings.get(key, default)
     
     def set(self, key: str, value: Any) -> bool:
         """Set a setting value and save"""
-        self.settings[key] = value
+        self._settings[key] = value
         return self.save_settings()
     
     def is_enabled(self) -> bool:
         """Check if bot is enabled"""
-        return self.settings.get("bot_enabled", True)
+        return self._settings.get("bot_enabled", True)
     
     def enable(self) -> bool:
         """Enable the bot"""
@@ -98,4 +98,4 @@ class Settings:
     
     def get_offline_message(self) -> str:
         """Get the offline notification message"""
-        return self.settings.get("offline_message", Config.DEFAULT_SETTINGS["offline_message"])
+        return self._settings.get("offline_message", Config.DEFAULT_SETTINGS["offline_message"])

@@ -190,7 +190,7 @@ class CrushBot:
                     f"✅ **Offline message updated!**\n\n"
                     f"New message:\n{new_message}"
                 )
-                logger.info(f"Offline message updated by owner")
+                logger.info("Offline message updated by owner")
             else:
                 await message.reply_text("❌ Failed to update offline message.")
         except Exception as e:
@@ -273,78 +273,98 @@ class CrushBot:
         except Exception as e:
             logger.error(f"Error handling incoming message: {e}")
     
+    def _check_mentions(self, message: Message, bot_username: str):
+        """Check if bot or owner is mentioned in the message"""
+        mentioned_bot = False
+        mentioned_owner = False
+        
+        if message.entities:
+            for entity in message.entities:
+                if entity.type == enums.MessageEntityType.MENTION:
+                    mention = message.text[entity.offset:entity.offset + entity.length]
+                    if mention == f"@{bot_username}":
+                        mentioned_bot = True
+                elif entity.type == enums.MessageEntityType.TEXT_MENTION:
+                    if entity.user.id == Config.OWNER_ID:
+                        mentioned_owner = True
+        
+        return mentioned_bot, mentioned_owner
+    
+    def _get_sender_info(self, sender):
+        """Get formatted sender information"""
+        return f"@{sender.username}" if sender.username else f"{sender.first_name}"
+    
+    async def _handle_bot_mention(self, message: Message):
+        """Handle when bot is mentioned in a group"""
+        try:
+            offline_msg = self.settings.get_offline_message()
+            await message.reply_text(offline_msg)
+            
+            if self.settings.get("forward_messages"):
+                await self._forward_bot_mention_to_owner(message)
+            
+            logger.info(f"Bot mentioned in group {message.chat.id} by {message.from_user.id}")
+        except Exception as e:
+            logger.error(f"Error handling bot mention: {e}")
+    
+    async def _forward_bot_mention_to_owner(self, message: Message):
+        """Forward bot mention notification to owner"""
+        sender_info = self._get_sender_info(message.from_user)
+        
+        notification = (
+            f"🏷️ **Bot Mentioned in Group**\n"
+            f"Group: {message.chat.title}\n"
+            f"From: {sender_info} (ID: `{message.from_user.id}`)\n"
+            f"Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
+            f"{'─' * 30}\n"
+        )
+        await self.app.send_message(Config.OWNER_ID, notification)
+        await message.forward(Config.OWNER_ID)
+    
+    async def _handle_owner_mention(self, message: Message):
+        """Handle when owner is mentioned or replied to in a group"""
+        if not self.settings.get("direct_message_alerts"):
+            return
+        
+        try:
+            sender_info = self._get_sender_info(message.from_user)
+            
+            notification = (
+                f"💬 **Someone is trying to reach you!**\n"
+                f"Group: {message.chat.title}\n"
+                f"From: {sender_info} (ID: `{message.from_user.id}`)\n"
+                f"Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
+                f"{'─' * 30}\n"
+            )
+            await self.app.send_message(Config.OWNER_ID, notification)
+            await message.forward(Config.OWNER_ID)
+            
+            logger.info(f"Owner mentioned in group {message.chat.id} by {message.from_user.id}")
+        except Exception as e:
+            logger.error(f"Error notifying owner: {e}")
+    
+    def _is_owner_reply(self, message: Message):
+        """Check if message is a reply to owner"""
+        return (message.reply_to_message and 
+                message.reply_to_message.from_user.id == Config.OWNER_ID)
+    
     async def handle_group_message(self, message: Message):
         """Handle messages in groups"""
         try:
-            # Check if bot is enabled
             if not self.settings.is_enabled():
                 return
             
-            # Get bot info
+            if message.from_user.id == Config.OWNER_ID:
+                return
+            
             bot_me = await self.app.get_me()
+            mentioned_bot, mentioned_owner = self._check_mentions(message, bot_me.username)
             
-            # Check if bot is mentioned or owner is mentioned
-            mentioned_bot = False
-            mentioned_owner = False
+            if mentioned_bot:
+                await self._handle_bot_mention(message)
             
-            if message.entities:
-                for entity in message.entities:
-                    if entity.type == enums.MessageEntityType.MENTION:
-                        mention = message.text[entity.offset:entity.offset + entity.length]
-                        if mention == f"@{bot_me.username}":
-                            mentioned_bot = True
-                    elif entity.type == enums.MessageEntityType.TEXT_MENTION:
-                        if entity.user.id == Config.OWNER_ID:
-                            mentioned_owner = True
-            
-            # If bot is mentioned, send offline notification
-            if mentioned_bot and message.from_user.id != Config.OWNER_ID:
-                try:
-                    offline_msg = self.settings.get_offline_message()
-                    await message.reply_text(offline_msg)
-                    
-                    # Forward to owner
-                    if self.settings.get("forward_messages"):
-                        sender = message.from_user
-                        sender_info = f"@{sender.username}" if sender.username else f"{sender.first_name}"
-                        
-                        notification = (
-                            f"🏷️ **Bot Mentioned in Group**\n"
-                            f"Group: {message.chat.title}\n"
-                            f"From: {sender_info} (ID: `{sender.id}`)\n"
-                            f"Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
-                            f"{'─' * 30}\n"
-                        )
-                        await self.app.send_message(Config.OWNER_ID, notification)
-                        await message.forward(Config.OWNER_ID)
-                    
-                    logger.info(f"Bot mentioned in group {message.chat.id} by {message.from_user.id}")
-                except Exception as e:
-                    logger.error(f"Error handling bot mention: {e}")
-            
-            # If owner is mentioned or replied to, notify owner
-            if (mentioned_owner or (message.reply_to_message and 
-                message.reply_to_message.from_user.id == Config.OWNER_ID)) and \
-                message.from_user.id != Config.OWNER_ID:
-                
-                if self.settings.get("direct_message_alerts"):
-                    try:
-                        sender = message.from_user
-                        sender_info = f"@{sender.username}" if sender.username else f"{sender.first_name}"
-                        
-                        notification = (
-                            f"💬 **Someone is trying to reach you!**\n"
-                            f"Group: {message.chat.title}\n"
-                            f"From: {sender_info} (ID: `{sender.id}`)\n"
-                            f"Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
-                            f"{'─' * 30}\n"
-                        )
-                        await self.app.send_message(Config.OWNER_ID, notification)
-                        await message.forward(Config.OWNER_ID)
-                        
-                        logger.info(f"Owner mentioned in group {message.chat.id} by {message.from_user.id}")
-                    except Exception as e:
-                        logger.error(f"Error notifying owner: {e}")
+            if mentioned_owner or self._is_owner_reply(message):
+                await self._handle_owner_mention(message)
         
         except Exception as e:
             logger.error(f"Error handling group message: {e}")
